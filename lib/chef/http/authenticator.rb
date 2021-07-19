@@ -28,6 +28,10 @@ class Chef
       DEFAULT_SERVER_API_VERSION = "2".freeze
 
       extend Chef::Mixin::PowershellExec
+      include Chef::Mixin::PowershellExec
+
+      extend Chef::Mixin::ShellOut
+      include Chef::Mixin::ShellOut
 
       attr_reader :signing_key_filename
       attr_reader :raw_key
