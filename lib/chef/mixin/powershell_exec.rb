@@ -15,8 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-require_relative "../powershell"
-require_relative "../pwsh"
+# jfm
+# require_relative "../powershell"
+# require_relative "../pwsh"
 
 # The powershell_exec mixin provides in-process access to the PowerShell engine.
 #
@@ -95,34 +96,12 @@ require_relative "../pwsh"
 #   credentials of the user running Chef Client are used.
 #
 
+require "chef-powershell"
+
 class Chef
   module Mixin
     module PowershellExec
-      # Run a command under PowerShell via a managed (.NET) API.
-      #
-      # Requires: .NET Framework 4.0 or higher on the target machine.
-      #
-      # @param script [String] script to run
-      # @param interpreter [Symbol] the interpreter type, `:powershell` or `:pwsh`
-      # @return [Chef::PowerShell] output
-      def powershell_exec(script, interpreter = :powershell)
-        case interpreter
-        when :powershell
-          Chef::PowerShell.new(script)
-        when :pwsh
-          Chef::Pwsh.new(script)
-        else
-          raise ArgumentError, "Expected interpreter of :powershell or :pwsh"
-        end
-      end
-
-      # The same as the #powershell_exec method except this will raise
-      # Chef::PowerShell::CommandFailed if the command fails
-      def powershell_exec!(script, interpreter = :powershell)
-        cmd = powershell_exec(script, interpreter)
-        cmd.error!
-        cmd
-      end
+      include Chef_PowerShell::ChefPowerShell::PowerShellExec
     end
   end
 end

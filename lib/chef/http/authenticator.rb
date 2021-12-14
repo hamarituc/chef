@@ -19,6 +19,7 @@
 require "chef/mixin/powershell_exec"
 require_relative "auth_credentials"
 require_relative "../exceptions"
+require_relative "../win32/registry"
 autoload :OpenSSL, "openssl"
 
 class Chef
@@ -102,7 +103,6 @@ class Chef
       # @param client_name - we're using the node name to store and retrieve any keys
       # Returns true if a key is found, false if not. False will trigger a registration event which will lead to a certificate based key being created
       #
-      #
       def self.detect_certificate_key(client_name)
         if ChefUtils.windows?
           check_certstore_for_key(client_name)
@@ -114,7 +114,7 @@ class Chef
       def self.check_certstore_for_key(client_name)
         powershell_code = <<~CODE
           $cert = Get-ChildItem -path cert:\\LocalMachine\\My -Recurse -Force  | Where-Object { $_.Subject -Match "#{client_name}" } -ErrorAction Stop
-          if ($cert) {
+          if (($cert.HasPrivateKey -eq $true) -and ($cert.PrivateKey.Key.ExportPolicy -ne "NonExportable")) {
             return $true
           }
           else{
@@ -152,35 +152,48 @@ class Chef
         raise Chef::Exceptions::InvalidPrivateKey, msg
       end
 
+      # takes no parameters. Checks for the password in the registry and returns it if there, otherewise returns false
+      def self.get_cert_password
+        begin
+          @win32registry = Chef::Win32::Registry.new
+          path = "HKEY_LOCAL_MACHINE\\Software\\Progress\\Authentication"
+          present = @win32registry.get_values(path)
+          if present.map { |h| h[:name] }[0] == "PfxPass"
+            present.map { |h| h[:data] }[0].to_s
+          end
+        rescue Chef::Exceptions::Win32RegKeyMissing
+          # if we don't have a password, log that and generate one
+          Chef::Log.warn "Authentication Hive and value not present in registry, creating it now"
+          new_path = "HKEY_LOCAL_MACHINE\\Software\\Progress\\Authentication"
+          some_chars = "~!@#$%^&*_-+=`|\\(){}[<]:;'>,.?/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".each_char.to_a
+          password = some_chars.sample(1 + rand(some_chars.count)).join[0...14]
+          values = {:name=>"PfxPass", :type=>:string, :data=>password}
+          @win32registry.set_value(new_path, values)
+          password
+        end
+      end
+
       def self.retrieve_certificate_key(client_name)
+
         require "openssl" unless defined?(OpenSSL)
 
         if ChefUtils.windows?
-          # This code block assumes a certificate with a subject name like "Chef-<node-name>" is in the \LocalMachine\My store and
-          # that there is a password stored in the registry to be used to export the pfx with.
-          powershell_password_code = <<~CODE
-              Try {
-                  Get-ItemPropertyValue -Path "HKLM:\\Software\\Progress\\Authenticator" -Name "PfxPass" -ErrorAction Stop;
-              }
-              Catch {
-                  return $false
-              }
-          CODE
-          password = powershell_exec!(powershell_password_code).result
 
-          if password == false
+          password = get_cert_password
+
+          unless password
             return false
           end
 
           powershell_code = <<~CODE
               Try {
-                  $my_pwd = ConvertTo-SecureString -String "#{password}" -Force -AsPlainText;
-                  $cert = Get-ChildItem -path cert:\\LocalMachine\\My -Recurse | Where-Object { $_.Subject -match "#{client_name}" } -ErrorAction Stop;
-                  $tempfile = [System.IO.Path]::GetTempPath() + "export_pfx.pfx";
-                  Export-PfxCertificate -Cert $cert -Password $my_pwd -FilePath $tempfile;
+                $my_pwd = ConvertTo-SecureString -String "#{password}" -Force -AsPlainText;
+                $cert = Get-ChildItem -path cert:\\LocalMachine\\My -Recurse | Where-Object { $_.Subject -match "#{client_name}" } -ErrorAction Stop;
+                $tempfile = [System.IO.Path]::GetTempPath() + "export_pfx.pfx";
+                Export-PfxCertificate -Cert $cert -Password $my_pwd -FilePath $tempfile;
               }
               Catch {
-                  return $false
+                return $false
               }
           CODE
           my_result = powershell_exec!(powershell_code).result
@@ -192,7 +205,7 @@ class Chef
           else
             false
           end
-        else # doing nothing for the Mac and Linux clients
+        else # doing nothing for the Mac and Linux clients for now
           false
         end
       end

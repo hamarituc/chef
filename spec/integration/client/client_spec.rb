@@ -34,7 +34,7 @@ describe "chef-client" do
 
   def install_certificate_in_store
     if ChefUtils.windows?
-      powershell_exec!("New-SelfSignedCertificate -certstorelocation cert:\\localmachine\\my -Subject #{client_name} -FriendlyName #{client_name}")
+      powershell_exec!("New-SelfSignedCertificate -certstorelocation cert:\\localmachine\\my -Subject #{client_name} -FriendlyName #{client_name} -KeyExportPolicy Exportable")
     end
   end
 
@@ -43,8 +43,8 @@ describe "chef-client" do
       $pfx_password = New-Object -TypeName PSObject
       $pfx_password | Add-Member -MemberType ScriptProperty -Name "Password" -Value { ("~!@#$%^&*_-+=`|\\(){}[<]:;'>,.?/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".tochararray() | Sort-Object { Get-Random })[0..14] -join '' }
       if (-not (Test-Path HKLM:\\SOFTWARE\\Progress)){
-        New-Item -Path "HKLM:\\SOFTWARE\\Progress\\Authenticator" -Force
-        New-ItemProperty  -path "HKLM:\\SOFTWARE\\Progress\\Authenticator" -name "PfxPass" -value $pfx_password.Password -PropertyType String
+        New-Item -Path "HKLM:\\SOFTWARE\\Progress\\Authentication" -Force
+        New-ItemProperty  -path "HKLM:\\SOFTWARE\\Progress\\Authentication" -name "PfxPass" -value $pfx_password.Password -PropertyType String
       }
     EOH
   end
@@ -62,7 +62,7 @@ describe "chef-client" do
   def verify_export_password_exists
     powershell_exec! <<~EOH
       Try {
-          $response = Get-ItemPropertyValue -Path "HKLM:\\Software\\Progress\\Authenticator" -Name "PfxPass" -ErrorAction Stop
+          $response = Get-ItemPropertyValue -Path "HKLM:\\Software\\Progress\\Authentication" -Name "PfxPass" -ErrorAction Stop
           if ($response) {return $true}
       }
       Catch {
