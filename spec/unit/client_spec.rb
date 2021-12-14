@@ -264,7 +264,6 @@ end
 shared_examples "a completed run" do
   include_context "run completed" # should receive run_completed_successfully
 
-  # test 2, part 3
   it "runs ohai, sets up authentication, loads node state, synchronizes policy, converges" do
     # This is what we're testing.
     expect(client.run).to be true
@@ -428,7 +427,6 @@ describe Chef::Client do
     end
   end
 
-  # test 2 starts here.
   describe "a full client run" do
     shared_examples_for "a successful client run" do
       include_context "a client run"
@@ -437,7 +435,6 @@ describe Chef::Client do
       include_examples "a completed run"
     end
 
-    # test 2 continues here. This is part 2
     describe "when running chef-client without fork" do
       include_examples "a successful client run"
     end
